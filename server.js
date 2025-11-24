@@ -15,7 +15,7 @@ import userRoutes from './routes/userRoutes.js';
 import usersRoutes from './routes/users.js'; // 🔥 NUEVO: Rutas para MongoDB Atlas
 
 // Importar modelo User para la limpieza
-import User from './models/user.js';
+import User from './models/User.js';
 // 🔹 IMPORTAR RUTAS TEMPORALES PARA DIAGNÓSTICO
 import tempRoutes from './tempRoutes.js';
 
