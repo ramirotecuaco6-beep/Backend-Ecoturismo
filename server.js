@@ -16,7 +16,6 @@ import usersRoutes from './routes/users.js'; // 🔥 NUEVO: Rutas para MongoDB A
 
 // Importar modelo User para la limpieza
 import User from './models/User.js';
-
 // 🔹 IMPORTAR RUTAS TEMPORALES PARA DIAGNÓSTICO
 import tempRoutes from './tempRoutes.js';
 
