@@ -4,7 +4,7 @@ import { verifyFirebaseToken } from "../middlewares/authMiddleware.js";
 import multer from "multer";
 import cloudinary from "../config/cloudinary.js";
 import UserPhoto from "../models/userPhoto.js";
-import User from "../models/User.js";
+import User from "../models/user.js";
 
 const router = express.Router();
 console.log("✅ userRoutes.js cargado correctamente");
