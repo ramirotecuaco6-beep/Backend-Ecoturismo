@@ -28,9 +28,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // --- Middlewares ---
+// 1. Define la lista de orígenes permitidos
+const allowedOrigins = [
+  "http://localhost:5173", // Tu entorno de desarrollo local (Vite/React)
+  "https://cheerful-belekoy-66d6ab.netlify.app" // Tu URL de producción en Netlify
+];
+
+// 2. Configura el middleware de CORS para usar la lista
 app.use(cors({
-  origin: "http://localhost:5173",
-  credentials: true
+  origin: allowedOrigins, // Acepta peticiones de cualquiera de los dos dominios
+  credentials: true // Permite el envío de cookies o headers de autorización si los usas
 }));
 
 // 🔥 CORRECCIÓN CRÍTICA: AUMENTAR LÍMITES A 500MB
@@ -207,8 +214,7 @@ app.post('/api/contacto', async (req, res) => {
               <p><strong>Mensaje:</strong> ${mensaje}</p>
             </div>
 
-            <p>Mientras tanto, puedes explorar nuestras aventuras en <a href="http://localhost:5173" style="color: #10B981;">EcoLibres</a></p>
-            
+            <p>Mientras tanto, puedes explorar nuestras aventuras en <a href="https://cheerful-belekoy-66d6ab.netlify.app" style="color: #10B981;">EcoLibres</a></p>            
             <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
               <p style="color: #666; font-size: 14px;">
                 <strong>Equipo EcoLibres</strong><br>
