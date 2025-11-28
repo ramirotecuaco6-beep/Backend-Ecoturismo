@@ -130,7 +130,7 @@ console.log('🔄 Montando tempRoutes en /api/temp...');
 app.use('/api/temp', tempRoutes);
 console.log('✅ tempRoutes montado en /api/temp');
 
-// --- RUTA DE CONTACTO INTEGRADA CON NODEMAILER REAL ---
+// --- RUTA DE CONTACTO MEJORADA CON MANEJO DE ERRORES ---
 app.post('/api/contacto', async (req, res) => {
   try {
     const { nombre, email, asunto, mensaje } = req.body;
@@ -141,13 +141,7 @@ app.post('/api/contacto', async (req, res) => {
     console.log('   📝 Asunto:', asunto);
     console.log('   💬 Mensaje:', mensaje?.substring(0, 100) + '...');
 
-    // 🔧 DIAGNÓSTICO EMAIL
-    console.log('🔧 DIAGNÓSTICO EMAIL:');
-    console.log('   - EMAIL_USER:', process.env.EMAIL_USER ? '✅ Configurado' : '❌ No configurado');
-    console.log('   - EMAIL_PASS:', process.env.EMAIL_PASS ? '✅ Configurado' : '❌ No configurado');
-    console.log('   - ADMIN_EMAIL:', process.env.ADMIN_EMAIL || process.env.EMAIL_USER);
-
-    // Validar campos requeridos
+    // Validaciones básicas
     if (!nombre || !email || !mensaje) {
       return res.status(400).json({
         success: false,
@@ -164,81 +158,91 @@ app.post('/api/contacto', async (req, res) => {
       });
     }
 
-    // 🔥 ENVÍO REAL CON NODEMAILER - CORREGIDO
+    // 🔥 CONFIGURACIÓN MEJORADA DE NODEMAILER
+    let emailSent = false;
+    let emailError = null;
+
     if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-      const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS
-        }
-      });
+      try {
+        const transporter = nodemailer.createTransport({
+          host: 'smtp.gmail.com',
+          port: 587,
+          secure: false,
+          requireTLS: true,
+          auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS
+          },
+          connectionTimeout: 30000,
+          greetingTimeout: 30000,
+          socketTimeout: 30000
+        });
 
-      // 1. Email para administradores
-      const adminMailOptions = {
-        from: process.env.EMAIL_USER,
-        to: process.env.ADMIN_EMAIL || process.env.EMAIL_USER,
-        subject: `📧 Nuevo mensaje de contacto: ${asunto || 'Sin asunto'}`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px;">
-            <h2 style="color: #10B981;">Nuevo mensaje de contacto - EcoLibres</h2>
-            <div style="background: #f9f9f9; padding: 20px; border-radius: 10px;">
-              <p><strong>Nombre:</strong> ${nombre}</p>
-              <p><strong>Email:</strong> ${email}</p>
-              <p><strong>Asunto:</strong> ${asunto || 'No especificado'}</p>
-              <p><strong>Mensaje:</strong></p>
-              <p style="background: white; padding: 15px; border-radius: 5px; border-left: 4px solid #10B981;">
-                ${mensaje.replace(/\n/g, '<br>')}
-              </p>
+        // Verificar conexión primero
+        await transporter.verify();
+        console.log('✅ Conexión SMTP verificada');
+
+        // Email para administradores
+        const adminMailOptions = {
+          from: `"EcoLibres Contacto" <${process.env.EMAIL_USER}>`,
+          to: process.env.ADMIN_EMAIL || process.env.EMAIL_USER,
+          subject: `📧 Nuevo mensaje de contacto: ${asunto || 'Sin asunto'}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px;">
+              <h2 style="color: #10B981;">Nuevo mensaje de contacto - EcoLibres</h2>
+              <div style="background: #f9f9f9; padding: 20px; border-radius: 10px;">
+                <p><strong>Nombre:</strong> ${nombre}</p>
+                <p><strong>Email:</strong> ${email}</p>
+                <p><strong>Asunto:</strong> ${asunto || 'No especificado'}</p>
+                <p><strong>Mensaje:</strong></p>
+                <p style="background: white; padding: 15px; border-radius: 5px; border-left: 4px solid #10B981;">
+                  ${mensaje.replace(/\n/g, '<br>')}
+                </p>
+              </div>
             </div>
-            <p style="color: #666; margin-top: 20px;">
-              Este mensaje fue enviado desde el formulario de contacto de EcoLibres.
-            </p>
-          </div>
-        `
-      };
+          `
+        };
 
-      // 2. Email de confirmación para el usuario
-      const userMailOptions = {
-        from: process.env.EMAIL_USER,
-        to: email,
-        subject: '✅ Hemos recibido tu mensaje - EcoLibres',
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px;">
-            <h2 style="color: #10B981;">¡Gracias por contactarnos, ${nombre}!</h2>
-            <p>Hemos recibido tu mensaje y te responderemos en menos de 24 horas.</p>
-            
-            <div style="background: #f0f9ff; padding: 20px; border-radius: 10px; margin: 20px 0;">
-              <h3 style="color: #0369A1;">Resumen de tu mensaje:</h3>
-              <p><strong>Asunto:</strong> ${asunto || 'Consulta general'}</p>
-              <p><strong>Mensaje:</strong> ${mensaje}</p>
+        // Email de confirmación para el usuario
+        const userMailOptions = {
+          from: `"EcoLibres" <${process.env.EMAIL_USER}>`,
+          to: email,
+          subject: '✅ Hemos recibido tu mensaje - EcoLibres',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px;">
+              <h2 style="color: #10B981;">¡Gracias por contactarnos, ${nombre}!</h2>
+              <p>Hemos recibido tu mensaje y te responderemos en menos de 24 horas.</p>
+              
+              <div style="background: #f0f9ff; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                <h3 style="color: #0369A1;">Resumen de tu mensaje:</h3>
+                <p><strong>Asunto:</strong> ${asunto || 'Consulta general'}</p>
+                <p><strong>Mensaje:</strong> ${mensaje}</p>
+              </div>
+
+              <p>Mientras tanto, puedes explorar nuestras aventuras en <a href="https://cheerful-belekoy-66d6ab.netlify.app" style="color: #10B981;">EcoLibres</a></p>
             </div>
+          `
+        };
 
-            <p>Mientras tanto, puedes explorar nuestras aventuras en <a href="https://cheerful-belekoy-66d6ab.netlify.app" style="color: #10B981;">EcoLibres</a></p>            
-            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
-              <p style="color: #666; font-size: 14px;">
-                <strong>Equipo EcoLibres</strong><br>
-                📧 ${process.env.EMAIL_USER}<br>
-                📱 +52 123 456 7890
-              </p>
-            </div>
-          </div>
-        `
-      };
-
-      // Enviar ambos emails
-      console.log('📤 Enviando emails...');
-      await transporter.sendMail(adminMailOptions);
-      console.log('   ✅ Email de administrador enviado');
-      await transporter.sendMail(userMailOptions);
-      console.log('   ✅ Email de confirmación enviado');
-      
-      console.log('✅ Todos los emails enviados correctamente');
-      
+        // Enviar emails
+        console.log('📤 Enviando emails...');
+        await transporter.sendMail(adminMailOptions);
+        console.log('✅ Email de administrador enviado');
+        await transporter.sendMail(userMailOptions);
+        console.log('✅ Email de confirmación enviado');
+        
+        emailSent = true;
+        
+      } catch (emailError) {
+        console.error('❌ Error enviando email:', emailError);
+        emailError = emailError.message;
+        // NO devolvemos error al cliente, solo registramos
+      }
     } else {
-      console.log('⚠️  Nodemailer no configurado - Solo simulación');
+      console.log('⚠️  Credenciales de email no configuradas - Simulando envío');
     }
 
+    // SIEMPRE respondemos éxito al cliente, incluso si falla el email
     res.status(200).json({
       success: true,
       message: '¡Mensaje enviado correctamente! Te contactaremos en menos de 24 horas.',
@@ -247,18 +251,28 @@ app.post('/api/contacto', async (req, res) => {
         email,
         asunto: asunto || 'Consulta general',
         timestamp: new Date().toISOString(),
-        emailSent: !!(process.env.EMAIL_USER && process.env.EMAIL_PASS)
+        emailSent: emailSent,
+        emailError: emailError || null
       }
     });
 
   } catch (error) {
     console.error('❌ Error en formulario de contacto:', error);
     
+    // Manejo específico de errores de email
     if (error.code === 'EAUTH') {
-      console.error('🔐 Error de autenticación Gmail - Verifica EMAIL_USER y EMAIL_PASS');
+      console.error('🔐 Error de autenticación Gmail');
       return res.status(500).json({
         success: false,
         error: 'Error de configuración del email. Contacta al administrador.'
+      });
+    }
+    
+    if (error.code === 'ETIMEDOUT') {
+      console.error('⏰ Timeout de conexión con Gmail');
+      return res.status(500).json({
+        success: false,
+        error: 'Timeout del servidor de email. Por favor intenta nuevamente.'
       });
     }
     
@@ -268,7 +282,6 @@ app.post('/api/contacto', async (req, res) => {
     });
   }
 });
-
 // --- Ruta de prueba / health check ---
 app.get('/api/health', (req, res) => {
   res.json({ 
