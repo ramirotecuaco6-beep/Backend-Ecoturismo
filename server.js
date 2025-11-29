@@ -130,7 +130,9 @@ console.log('🔄 Montando tempRoutes en /api/temp...');
 app.use('/api/temp', tempRoutes);
 console.log('✅ tempRoutes montado en /api/temp');
 
-// --- RUTA DE CONTACTO CON EMAILJS - 100% FUNCIONAL ---
+import emailjs from '@emailjs/nodejs';
+
+// --- RUTA DE CONTACTO CON EMAILJS SDK OFICIAL ---
 app.post('/api/contacto', async (req, res) => {
   try {
     const { nombre, email, asunto, mensaje } = req.body;
@@ -161,52 +163,70 @@ app.post('/api/contacto', async (req, res) => {
     let emailSent = false;
     let emailError = null;
 
-    // 🔥 ENVÍO CON EMAILJS (CONFIABLE)
+    // 🔥 ENVÍO CON EMAILJS SDK OFICIAL
     if (process.env.EMAIL_SERVICE === 'emailjs' && process.env.EMAILJS_SERVICE_ID) {
       try {
-        console.log('🔄 Enviando email via EmailJS...');
+        console.log('🔄 Enviando email via EmailJS SDK...');
         
-        const emailjsData = {
-          service_id: process.env.EMAILJS_SERVICE_ID,
-          template_id: process.env.EMAILJS_TEMPLATE_ID,
-          user_id: process.env.EMAILJS_PUBLIC_KEY,
-          template_params: {
+        // 1. Email para el administrador
+        const adminEmailResult = await emailjs.send(
+          process.env.EMAILJS_SERVICE_ID,
+          process.env.EMAILJS_TEMPLATE_ID,
+          {
             from_name: nombre,
             from_email: email,
             to_email: process.env.ADMIN_EMAIL,
             subject: asunto || 'Consulta EcoLibres',
             message: mensaje,
             reply_to: email,
-            timestamp: new Date().toLocaleString()
-          }
-        };
-
-        console.log('📤 Datos para EmailJS:', {
-          service_id: emailjsData.service_id,
-          template_id: emailjsData.template_id,
-          to_email: emailjsData.template_params.to_email
-        });
-
-        const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+            timestamp: new Date().toLocaleString(),
+            type: 'contact_form'
           },
-          body: JSON.stringify(emailjsData)
-        });
+          {
+            publicKey: process.env.EMAILJS_PUBLIC_KEY,
+            privateKey: process.env.EMAILJS_PRIVATE_KEY,
+          }
+        );
 
-        console.log('📨 Respuesta de EmailJS:', response.status, response.statusText);
+        console.log('✅ Email de administrador enviado:', adminEmailResult.status, adminEmailResult.text);
 
-        if (response.ok) {
-          emailSent = true;
-          console.log('✅ Email enviado exitosamente via EmailJS');
-        } else {
-          const errorText = await response.text();
-          throw new Error(`EmailJS error: ${response.status} - ${errorText}`);
-        }
+        // 2. Email de confirmación al usuario (usando la plantilla de auto-respuesta)
+        const userEmailResult = await emailjs.send(
+          process.env.EMAILJS_SERVICE_ID,
+          'template_z2e7nww', // Plantilla de auto-respuesta
+          {
+            from_name: 'Equipo EcoLibres',
+            from_email: process.env.ADMIN_EMAIL,
+            to_email: email,
+            subject: '✅ Confirmación de mensaje recibido',
+            message: `Hola ${nombre}, hemos recibido tu mensaje: "${mensaje.substring(0, 100)}..."`,
+            user_name: nombre,
+            user_message: mensaje,
+            timestamp: new Date().toLocaleString()
+          },
+          {
+            publicKey: process.env.EMAILJS_PUBLIC_KEY,
+            privateKey: process.env.EMAILJS_PRIVATE_KEY,
+          }
+        );
+
+        console.log('✅ Email de confirmación enviado:', userEmailResult.status, userEmailResult.text);
+        
+        emailSent = true;
+        console.log('🎉 Todos los emails enviados exitosamente via EmailJS');
 
       } catch (error) {
         console.error('❌ Error con EmailJS:', error);
+        
+        // Información detallada del error
+        if (error.response) {
+          console.error('📧 Detalles del error EmailJS:', {
+            status: error.response.status,
+            text: error.response.text,
+            headers: error.response.headers
+          });
+        }
+        
         emailError = error.message;
       }
     } else {
@@ -225,7 +245,7 @@ app.post('/api/contacto', async (req, res) => {
         timestamp: new Date().toISOString(),
         emailSent,
         emailError: emailError || null,
-        service: 'EmailJS'
+        service: 'EmailJS SDK'
       }
     });
 
