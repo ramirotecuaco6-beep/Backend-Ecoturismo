@@ -1,10 +1,11 @@
-// server.js - VERSIÓN COMPLETA CON EMAILJS INTEGRADO
+// server.js - VERSIÓN COMPLETA CON MONGODB ATLAS INTEGRADO
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import nodemailer from 'nodemailer';
 
 // Importar rutas
 import lugarRoutes from './routes/lugares.js';
@@ -57,10 +58,9 @@ console.log('     - API Key:', process.env.CLOUDINARY_API_KEY ? '✅ Configurada
 console.log('     - API Secret:', process.env.CLOUDINARY_API_SECRET ? '✅ Configurada' : '❌ No configurada');
 console.log('   🗄️  MongoDB:', process.env.MONGODB_URI ? '✅ Configurada' : '❌ No configurada');
 console.log('   🚪 Puerto:', process.env.PORT || 5000);
-console.log('   📧 Email Service:', process.env.EMAIL_SERVICE || 'No configurado');
-console.log('   📧 EmailJS:', process.env.EMAILJS_SERVICE_ID ? '✅ Configurado' : '❌ No configurado');
+console.log('   📧 Email:', process.env.EMAIL_USER ? '✅ Configurado' : '❌ No configurado');
 console.log('   📁 Límite archivos: 500MB');
-console.log('   🎯 MongoDB Routes:', '✅ Configuradas');
+console.log('   🎯 MongoDB Routes:', '✅ Configuradas'); // 🔥 NUEVO
 console.log('');
 
 // --- Conexión a MongoDB ---
@@ -81,13 +81,13 @@ mongoose.connect(process.env.MONGODB_URI, {
     console.log('⚠️  Cloudinary no configurado - Funcionalidad de imágenes limitada');
   }
 
-  if (process.env.EMAIL_SERVICE === 'emailjs' && process.env.EMAILJS_SERVICE_ID) {
-    console.log('✅ EmailJS configurado - Listo para enviar emails de contacto');
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    console.log('✅ Nodemailer configurado - Listo para enviar emails de contacto');
   } else {
-    console.log('⚠️  EmailJS no configurado - Emails desactivados');
+    console.log('⚠️  Nodemailer no configurado - Emails desactivados');
   }
 
-  console.log('✅ MongoDB Atlas Routes - Listo para usuarios y logros');
+  console.log('✅ MongoDB Atlas Routes - Listo para usuarios y logros'); // 🔥 NUEVO
 })
 .catch(error => {
   console.error('❌ Error conectando a MongoDB:', error);
@@ -107,7 +107,7 @@ mongoose.connection.on('connected', async () => {
 // 🔹 DIAGNÓSTICO DE RUTAS USER
 console.log('\n🔍 DIAGNÓSTICO DE RUTAS:');
 console.log('   - userRoutes importado:', userRoutes ? '✅' : '❌');
-console.log('   - usersRoutes importado:', usersRoutes ? '✅' : '❌');
+console.log('   - usersRoutes importado:', usersRoutes ? '✅' : '❌'); // 🔥 NUEVO
 console.log('   - Tipo de userRoutes:', typeof userRoutes);
 
 // --- Rutas del API ---
@@ -130,20 +130,24 @@ console.log('🔄 Montando tempRoutes en /api/temp...');
 app.use('/api/temp', tempRoutes);
 console.log('✅ tempRoutes montado en /api/temp');
 
-import emailjs from '@emailjs/nodejs';
-
-// --- RUTA DE CONTACTO CON EMAILJS SDK OFICIAL ---
+// --- RUTA DE CONTACTO INTEGRADA CON NODEMAILER REAL ---
 app.post('/api/contacto', async (req, res) => {
   try {
     const { nombre, email, asunto, mensaje } = req.body;
 
-    console.log('\n📧 Nuevo mensaje de contacto:');
+    console.log('\n📧 Nuevo mensaje de contacto recibido:');
     console.log('   👤 Nombre:', nombre);
     console.log('   📧 Email:', email);
     console.log('   📝 Asunto:', asunto);
     console.log('   💬 Mensaje:', mensaje?.substring(0, 100) + '...');
 
-    // Validaciones
+    // 🔧 DIAGNÓSTICO EMAIL
+    console.log('🔧 DIAGNÓSTICO EMAIL:');
+    console.log('   - EMAIL_USER:', process.env.EMAIL_USER ? '✅ Configurado' : '❌ No configurado');
+    console.log('   - EMAIL_PASS:', process.env.EMAIL_PASS ? '✅ Configurado' : '❌ No configurado');
+    console.log('   - ADMIN_EMAIL:', process.env.ADMIN_EMAIL || process.env.EMAIL_USER);
+
+    // Validar campos requeridos
     if (!nombre || !email || !mensaje) {
       return res.status(400).json({
         success: false,
@@ -160,81 +164,81 @@ app.post('/api/contacto', async (req, res) => {
       });
     }
 
-    let emailSent = false;
-    let emailError = null;
-
-    // 🔥 ENVÍO CON EMAILJS SDK OFICIAL
-    if (process.env.EMAIL_SERVICE === 'emailjs' && process.env.EMAILJS_SERVICE_ID) {
-      try {
-        console.log('🔄 Enviando email via EmailJS SDK...');
-        
-        // 1. Email para el administrador
-        const adminEmailResult = await emailjs.send(
-          process.env.EMAILJS_SERVICE_ID,
-          process.env.EMAILJS_TEMPLATE_ID,
-          {
-            from_name: nombre,
-            from_email: email,
-            to_email: process.env.ADMIN_EMAIL,
-            subject: asunto || 'Consulta EcoLibres',
-            message: mensaje,
-            reply_to: email,
-            timestamp: new Date().toLocaleString(),
-            type: 'contact_form'
-          },
-          {
-            publicKey: process.env.EMAILJS_PUBLIC_KEY,
-            privateKey: process.env.EMAILJS_PRIVATE_KEY,
-          }
-        );
-
-        console.log('✅ Email de administrador enviado:', adminEmailResult.status, adminEmailResult.text);
-
-        // 2. Email de confirmación al usuario (usando la plantilla de auto-respuesta)
-        const userEmailResult = await emailjs.send(
-          process.env.EMAILJS_SERVICE_ID,
-          'template_z2e7nww', // Plantilla de auto-respuesta
-          {
-            from_name: 'Equipo EcoLibres',
-            from_email: process.env.ADMIN_EMAIL,
-            to_email: email,
-            subject: '✅ Confirmación de mensaje recibido',
-            message: `Hola ${nombre}, hemos recibido tu mensaje: "${mensaje.substring(0, 100)}..."`,
-            user_name: nombre,
-            user_message: mensaje,
-            timestamp: new Date().toLocaleString()
-          },
-          {
-            publicKey: process.env.EMAILJS_PUBLIC_KEY,
-            privateKey: process.env.EMAILJS_PRIVATE_KEY,
-          }
-        );
-
-        console.log('✅ Email de confirmación enviado:', userEmailResult.status, userEmailResult.text);
-        
-        emailSent = true;
-        console.log('🎉 Todos los emails enviados exitosamente via EmailJS');
-
-      } catch (error) {
-        console.error('❌ Error con EmailJS:', error);
-        
-        // Información detallada del error
-        if (error.response) {
-          console.error('📧 Detalles del error EmailJS:', {
-            status: error.response.status,
-            text: error.response.text,
-            headers: error.response.headers
-          });
+    // 🔥 ENVÍO REAL CON NODEMAILER - CORREGIDO
+    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS
         }
-        
-        emailError = error.message;
-      }
+      });
+
+      // 1. Email para administradores
+      const adminMailOptions = {
+        from: process.env.EMAIL_USER,
+        to: process.env.ADMIN_EMAIL || process.env.EMAIL_USER,
+        subject: `📧 Nuevo mensaje de contacto: ${asunto || 'Sin asunto'}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px;">
+            <h2 style="color: #10B981;">Nuevo mensaje de contacto - EcoLibres</h2>
+            <div style="background: #f9f9f9; padding: 20px; border-radius: 10px;">
+              <p><strong>Nombre:</strong> ${nombre}</p>
+              <p><strong>Email:</strong> ${email}</p>
+              <p><strong>Asunto:</strong> ${asunto || 'No especificado'}</p>
+              <p><strong>Mensaje:</strong></p>
+              <p style="background: white; padding: 15px; border-radius: 5px; border-left: 4px solid #10B981;">
+                ${mensaje.replace(/\n/g, '<br>')}
+              </p>
+            </div>
+            <p style="color: #666; margin-top: 20px;">
+              Este mensaje fue enviado desde el formulario de contacto de EcoLibres.
+            </p>
+          </div>
+        `
+      };
+
+      // 2. Email de confirmación para el usuario
+      const userMailOptions = {
+        from: process.env.EMAIL_USER,
+        to: email,
+        subject: '✅ Hemos recibido tu mensaje - EcoLibres',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px;">
+            <h2 style="color: #10B981;">¡Gracias por contactarnos, ${nombre}!</h2>
+            <p>Hemos recibido tu mensaje y te responderemos en menos de 24 horas.</p>
+            
+            <div style="background: #f0f9ff; padding: 20px; border-radius: 10px; margin: 20px 0;">
+              <h3 style="color: #0369A1;">Resumen de tu mensaje:</h3>
+              <p><strong>Asunto:</strong> ${asunto || 'Consulta general'}</p>
+              <p><strong>Mensaje:</strong> ${mensaje}</p>
+            </div>
+
+            <p>Mientras tanto, puedes explorar nuestras aventuras en <a href="https://cheerful-belekoy-66d6ab.netlify.app" style="color: #10B981;">EcoLibres</a></p>            
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
+              <p style="color: #666; font-size: 14px;">
+                <strong>Equipo EcoLibres</strong><br>
+                📧 ${process.env.EMAIL_USER}<br>
+                📱 +52 123 456 7890
+              </p>
+            </div>
+          </div>
+        `
+      };
+
+      // Enviar ambos emails
+      console.log('📤 Enviando emails...');
+      await transporter.sendMail(adminMailOptions);
+      console.log('   ✅ Email de administrador enviado');
+      await transporter.sendMail(userMailOptions);
+      console.log('   ✅ Email de confirmación enviado');
+      
+      console.log('✅ Todos los emails enviados correctamente');
+      
     } else {
-      console.log('⚠️ EmailJS no configurado - Simulando envío');
-      emailSent = true; // Simulamos éxito para desarrollo
+      console.log('⚠️  Nodemailer no configurado - Solo simulación');
     }
 
-    // ✅ RESPUESTA AL CLIENTE
     res.status(200).json({
       success: true,
       message: '¡Mensaje enviado correctamente! Te contactaremos en menos de 24 horas.',
@@ -243,25 +247,24 @@ app.post('/api/contacto', async (req, res) => {
         email,
         asunto: asunto || 'Consulta general',
         timestamp: new Date().toISOString(),
-        emailSent,
-        emailError: emailError || null,
-        service: 'EmailJS SDK'
+        emailSent: !!(process.env.EMAIL_USER && process.env.EMAIL_PASS)
       }
     });
 
   } catch (error) {
-    console.error('❌ Error inesperado en contacto:', error);
+    console.error('❌ Error en formulario de contacto:', error);
     
-    // ✅ INCLUSO EN ERROR, RESPONDEMOS ÉXITO
-    res.status(200).json({
-      success: true,
-      message: 'Mensaje recibido. Gracias por contactarnos.',
-      data: {
-        nombre: req.body.nombre,
-        email: req.body.email,
-        timestamp: new Date().toISOString(),
-        received: true
-      }
+    if (error.code === 'EAUTH') {
+      console.error('🔐 Error de autenticación Gmail - Verifica EMAIL_USER y EMAIL_PASS');
+      return res.status(500).json({
+        success: false,
+        error: 'Error de configuración del email. Contacta al administrador.'
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      error: 'Error interno del servidor. Por favor intenta nuevamente.'
     });
   }
 });
@@ -277,8 +280,8 @@ app.get('/api/health', (req, res) => {
                   process.env.CLOUDINARY_API_KEY && 
                   process.env.CLOUDINARY_API_SECRET) ? '✅ Configurado' : '⚠️ No configurado',
       contacto: '✅ Disponible',
-      email: (process.env.EMAIL_SERVICE === 'emailjs' && process.env.EMAILJS_SERVICE_ID) ? '✅ Configurado' : '⚠️ No configurado',
-      mongodb_atlas_routes: '✅ Disponible'
+      email: (process.env.EMAIL_USER && process.env.EMAIL_PASS) ? '✅ Configurado' : '⚠️ No configurado',
+      mongodb_atlas_routes: '✅ Disponible' // 🔥 NUEVO
     },
     limits: {
       fileUpload: '500MB',
@@ -287,12 +290,12 @@ app.get('/api/health', (req, res) => {
     },
     diagnostic: {
       userRoutes: !!userRoutes,
-      usersRoutes: !!usersRoutes,
+      usersRoutes: !!usersRoutes, // 🔥 NUEVO
       tempRoutes: true,
       contactoRoute: true
     },
     environment: process.env.NODE_ENV || 'development',
-    available_endpoints: [
+    available_endpoints: [ // 🔥 NUEVO
       '/api/users (MongoDB Atlas)',
       '/api/user (Firebase + Cloudinary)',
       '/api/lugares',
@@ -331,14 +334,14 @@ app.get('/api/info', (req, res) => {
       json: '500MB',
       form_data: '500MB'
     },
-    email_service: (process.env.EMAIL_SERVICE === 'emailjs' && process.env.EMAILJS_SERVICE_ID) ? '✅ EmailJS Activo' : '❌ Inactivo',
-    mongodb_atlas: '✅ Integrado - Usuarios y Logros',
+    email_service: (process.env.EMAIL_USER && process.env.EMAIL_PASS) ? '✅ Activo' : '❌ Inactivo',
+    mongodb_atlas: '✅ Integrado - Usuarios y Logros', // 🔥 NUEVO
     supported_media: [
       'images: jpg, jpeg, png, gif, webp, bmp, svg',
       'videos: mov, mp4, webm, ogg, avi, 3gp, mpeg, mkv, flv, wmv'
     ],
     contact_form: '✅ Disponible - POST /api/contacto',
-    mongodb_routes: [
+    mongodb_routes: [ // 🔥 NUEVO
       'POST /api/users - Crear usuario',
       'GET /api/users/:uid - Obtener usuario', 
       'POST /api/users/:uid/achievements - Agregar logro',
@@ -429,7 +432,7 @@ app.listen(PORT, () => {
   console.log('   ✅ Form data: 500MB');
   console.log('\n📧 Servicio de Email:');
   console.log('   ✅ Formulario contacto: ACTIVO');
-  console.log('   ✅ Servicio: EmailJS');
+  console.log('   ✅ Envío automático: ' + (process.env.EMAIL_USER && process.env.EMAIL_PASS ? 'ACTIVADO' : 'SIMULACIÓN'));
   console.log('\n🗄️  MongoDB Atlas:');
   console.log('   ✅ Usuarios y logros: INTEGRADO');
   console.log('   ✅ Endpoints: /api/users/*');

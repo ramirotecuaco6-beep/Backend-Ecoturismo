@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 const { Schema } = mongoose;
 
-// 🏆 Esquema MEJORADO de logros
+// 🎯 Esquema MEJORADO de logros
 const AchievementSchema = new Schema(
   {
     id: { 
@@ -56,7 +56,48 @@ const VisitedPlaceSchema = new Schema(
   { _id: false }
 );
 
-// 👤 Usuario principal - VERSIÓN CORREGIDA
+// 🗺️ ESQUEMA NUEVO: Rutas completadas (para el mapa de calor)
+const RutaCompletadaSchema = new Schema(
+  {
+    lugarId: { 
+      type: String, 
+      required: true 
+    },
+    lugarNombre: { 
+      type: String, 
+      required: true 
+    },
+    distancia: { 
+      type: Number, 
+      default: 0 
+    }, // en km
+    duracion: { 
+      type: Number, 
+      default: 0 
+    }, // en minutos
+    coordenadas: [{
+      lat: { type: Number, required: true },
+      lng: { type: Number, required: true },
+      timestamp: { type: Date, default: Date.now }
+    }],
+    fecha: { 
+      type: Date, 
+      default: Date.now 
+    },
+    completada: { 
+      type: Boolean, 
+      default: true 
+    },
+    tipoActividad: {
+      type: String,
+      enum: ["senderismo", "natacion", "camping", "escalada", "observacion", "fotografia", "otros"],
+      default: "senderismo"
+    }
+  },
+  { _id: true } // IMPORTANTE: mantener _id para poder referenciar
+);
+
+// 👤 Usuario principal - VERSIÓN MEJORADA CON RUTAS COMPLETADAS
 const UserSchema = new Schema({
   // 🔥 CAMPO PRINCIPAL - Usar _id como UID de Firebase
   _id: { 
@@ -64,14 +105,13 @@ const UserSchema = new Schema({
     required: true
   },
   
-  // 📧 Email - QUITAR unique temporalmente para resolver conflictos
+  // 📧 Email
   email: { 
     type: String, 
     required: true
-    // 🔥 QUITADO: unique: true temporalmente
   },
   
-  // Nombres para compatibilidad
+  // 👤 Nombres para compatibilidad
   nombre: { type: String },
   displayName: { type: String },
   
@@ -89,6 +129,9 @@ const UserSchema = new Schema({
   visitedPlaces: [VisitedPlaceSchema],
   stepsByDay: [StepSchema],
   
+  // 🗺️ CAMPO NUEVO: Historial de rutas completadas (PARA EL MAPA DE CALOR)
+  rutasCompletadas: [RutaCompletadaSchema],
+  
 }, {
   timestamps: true,
   toJSON: {
@@ -101,10 +144,11 @@ const UserSchema = new Schema({
   }
 });
 
-// Índices para consultas rápidas (sin índice único en email temporalmente)
-UserSchema.index({ email: 1 }); // 🔥 QUITADO: unique: true
+// Índices para consultas rápidas
+UserSchema.index({ email: 1 });
 UserSchema.index({ 'logros.id': 1 });
 UserSchema.index({ 'logros.completado': 1 });
+UserSchema.index({ 'rutasCompletadas.fecha': -1 }); // Índice nuevo para ordenar por fecha
 
 // ✅ Método CORREGIDO para encontrar o crear usuario
 UserSchema.statics.findOrCreate = async function(userData) {
@@ -142,7 +186,8 @@ UserSchema.statics.findOrCreate = async function(userData) {
         photoURL: userData.picture || userData.photoURL || '',
         logros: userData.logros || [],
         visitedPlaces: userData.visitedPlaces || [],
-        stepsByDay: userData.stepsByDay || []
+        stepsByDay: userData.stepsByDay || [],
+        rutasCompletadas: userData.rutasCompletadas || [] // ✅ NUEVO CAMPO INICIALIZADO
       });
     }
     
@@ -195,6 +240,69 @@ UserSchema.methods.addAchievement = function(achievementData) {
     console.error('❌ Error en addAchievement:', error);
     throw error;
   }
+};
+
+// 🗺️ MÉTODO NUEVO: Agregar ruta completada
+UserSchema.methods.addRutaCompletada = function(rutaData) {
+  try {
+    console.log('🗺️ Agregando ruta completada para usuario:', this._id);
+    
+    if (!rutaData.lugarId || !rutaData.lugarNombre) {
+      throw new Error('lugarId y lugarNombre son requeridos');
+    }
+
+    const nuevaRuta = {
+      lugarId: rutaData.lugarId,
+      lugarNombre: rutaData.lugarNombre,
+      distancia: rutaData.distancia || 0,
+      duracion: rutaData.duracion || 0,
+      coordenadas: rutaData.coordenadas || [],
+      fecha: rutaData.fecha ? new Date(rutaData.fecha) : new Date(),
+      completada: true,
+      tipoActividad: rutaData.tipoActividad || "senderismo"
+    };
+
+    // Inicializar array si no existe
+    if (!this.rutasCompletadas) {
+      this.rutasCompletadas = [];
+    }
+
+    this.rutasCompletadas.push(nuevaRuta);
+    console.log('✅ Ruta agregada. Total de rutas:', this.rutasCompletadas.length);
+    
+    return this.save();
+  } catch (error) {
+    console.error('❌ Error en addRutaCompletada:', error);
+    throw error;
+  }
+};
+
+// 📊 MÉTODO NUEVO: Obtener estadísticas de rutas
+UserSchema.methods.getEstadisticasRutas = function() {
+  const rutas = this.rutasCompletadas || [];
+  
+  return {
+    totalRutas: rutas.length,
+    lugaresUnicos: new Set(rutas.map(r => r.lugarId)).size,
+    distanciaTotal: rutas.reduce((total, ruta) => total + (ruta.distancia || 0), 0),
+    tiempoTotal: rutas.reduce((total, ruta) => total + (ruta.duracion || 0), 0),
+    actividadMasComun: this.getActividadMasComun(),
+    ultimaRuta: rutas.length > 0 ? rutas[rutas.length - 1] : null
+  };
+};
+
+// 🏆 MÉTODO NUEVO: Obtener actividad más común
+UserSchema.methods.getActividadMasComun = function() {
+  const rutas = this.rutasCompletadas || [];
+  if (rutas.length === 0) return "senderismo";
+  
+  const conteo = {};
+  rutas.forEach(ruta => {
+    const actividad = ruta.tipoActividad || "senderismo";
+    conteo[actividad] = (conteo[actividad] || 0) + 1;
+  });
+  
+  return Object.keys(conteo).reduce((a, b) => conteo[a] > conteo[b] ? a : b);
 };
 
 // ✅ MÉTODO: Obtener logros completados
